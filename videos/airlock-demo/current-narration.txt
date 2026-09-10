@@ -1,0 +1,11 @@
+Airlock is a control center for autonomous software. Each agent has its own identity, and Kong decides which agent paths and tools are allowed.
+
+In Agent Graph, Coding accepts Planner and Security. Research is explicitly denied. The real A2A call is blocked by Kong before Coding receives it.
+
+In Attack Lab, we test the same principle with MCP. Research attempts delete_repository through a standard tools call. Kong returns 403, the MCP server shows zero destructive calls, and the trace is saved.
+
+The approval flow is different. Coding needs create_branch, so it pauses for a human. The browser never sees the privileged credential. After I approve one use, the backend invokes Kong with its server-only approval identity, and the grant is consumed.
+
+For model recovery, the primary Ollama adapter returns five-oh-three. Kong retries the same client request on the lower-priority target. The workflow continues without FastAPI choosing a model.
+
+Finally, Traffic and Audit joins the gateway telemetry and Airlock audit projection with a shared trace ID. This gives operators proof, not just a policy screen.

@@ -1,0 +1,23 @@
+_format_version: "3.0"
+services:
+  - name: airlock-api
+    url: http://api:8001
+    routes:
+      - name: airlock-api-route
+        paths: ["/api"]
+        strip_path: false
+  - name: airlock-mcp
+    url: http://mcp-server:8010
+    routes:
+      - name: airlock-mcp-route
+        paths: ["/mcp"]
+        strip_path: true
+plugins:
+  - name: correlation-id
+    config: { header_name: X-Airlock-Trace-Id, generator: uuid, echo_downstream: true }
+  - name: http-log
+    config:
+      http_endpoint: http://api:8001/api/telemetry/kong
+      method: POST
+      timeout: 1000
+      keepalive: 60000

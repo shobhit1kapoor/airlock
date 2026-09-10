@@ -1,0 +1,23 @@
+{
+  "display_name": "Airlock Git MCP",
+  "name": "airlock-git-passthrough",
+  "type": "passthrough-listener",
+  "enabled": true,
+  "access": {
+    "acl_attribute_type": "consumer",
+    "auth_strategies": ["airlock-key-auth"],
+    "acls": {"allow": ["planner-agent", "research-agent", "security-agent", "coding-agent", "approval-coding-agent"]},
+    "default_tool_acls": {"allow": ["planner-agent", "research-agent", "security-agent", "coding-agent", "approval-coding-agent"]}
+  },
+  "config": {
+    "url": "http://mcp-server:8010/mcp",
+    "route": {"paths": ["/mcp/git2"]},
+    "logging": {"payloads": true, "audits": true}
+  },
+  "tools": [
+    {"name": "read_repository", "access": {"acls": {"allow": ["planner-agent", "research-agent", "security-agent", "coding-agent", "approval-coding-agent"]}}},
+    {"name": "search_code", "access": {"acls": {"allow": ["planner-agent", "research-agent", "security-agent", "coding-agent", "approval-coding-agent"]}}},
+    {"name": "create_branch", "access": {"acls": {"allow": ["approval-coding-agent"]}}},
+    {"name": "delete_repository", "access": {"acls": {"allow": ["security-agent"]}}}
+  ]
+}

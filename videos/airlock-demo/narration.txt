@@ -1,0 +1,13 @@
+Autonomous agents can move faster than a person can inspect every request. One shared credential can turn a helpful task into a production action.
+
+Airlock gives every agent its own identity, then lets Kong decide what that identity may reach. This is the live control center: the local Kong data plane, protected tools, approval grants, and evidence from real requests.
+
+In the agent graph, Coding accepts work from Planner and Security. Research is not on that list. When Research tries to send Coding a message, Kong returns a 403 before Coding receives it.
+
+Tools follow the same rule. Research may read and search code, but it cannot call delete_repository. This is a real MCP tools call. Kong denies it, and the Git MCP server records zero destructive invocations.
+
+Some work needs a human. Coding asks to create a branch, but its normal credential is blocked. An operator approves one use. Only the Airlock backend uses the temporary approval identity, then the grant is consumed.
+
+Finally, model recovery stays in the gateway. The primary Ollama adapter returns a five-oh-three. Kong retries the same client request on the fallback model, and the workflow continues.
+
+Traffic and Audit ties every proof together with a trace ID and native Kong telemetry. Airlock controls what autonomous software can access.

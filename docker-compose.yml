@@ -1,0 +1,92 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: airlock
+      POSTGRES_USER: airlock
+      POSTGRES_PASSWORD: airlock
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U airlock -d airlock"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    networks: [airlock-net]
+
+  api:
+    build: ./api
+    environment:
+      DATABASE_URL: postgresql://airlock:airlock@postgres:5432/airlock
+      # The Konnect-managed local data plane is provisioned as airlock-gateway
+      # by Kong's official AI Gateway quickstart and joins airlock-net.
+      KONG_PROXY_URL: http://airlock-gateway:8000
+      PLANNER_AGENT_KEY: ${PLANNER_AGENT_KEY:-planner-agent-local-key}
+      RESEARCH_AGENT_KEY: ${RESEARCH_AGENT_KEY:-research-agent-local-key}
+      APPROVAL_CODING_AGENT_KEY: ${APPROVAL_CODING_AGENT_KEY:-approval-coding-local-only}
+      # The OTEL policy reaches this endpoint from the private airlock-net.
+      # Set this in .env to require the same token from external collectors.
+      KONG_TELEMETRY_TOKEN: ${KONG_TELEMETRY_TOKEN-}
+      KONNECT_TOKEN: ${KONNECT_TOKEN-}
+      KONNECT_AI_GATEWAY_ID: ${KONNECT_AI_GATEWAY_ID-}
+      KONNECT_REGION: ${KONNECT_REGION:-us}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports: ["8001:8001"]
+    networks: [airlock-net]
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.116.1
+    command: ["--config=/etc/otelcol/config.yaml"]
+    volumes:
+      - ./otel-collector-config.yaml:/etc/otelcol/config.yaml:ro
+    depends_on: [api]
+    networks: [airlock-net]
+
+  mcp-server:
+    build: ./services/mcp-server
+    ports: ["8010:8010"]
+    networks: [airlock-net]
+
+  planner-agent:
+    build: ./services/a2a-agent
+    environment: { AGENT_ID: planner-agent }
+    networks: [airlock-net]
+  research-agent:
+    build: ./services/a2a-agent
+    environment: { AGENT_ID: research-agent }
+    networks: [airlock-net]
+  security-agent:
+    build: ./services/a2a-agent
+    environment: { AGENT_ID: security-agent }
+    networks: [airlock-net]
+  coding-agent:
+    build: ./services/a2a-agent
+    environment: { AGENT_ID: coding-agent }
+    networks: [airlock-net]
+
+  ollama-primary-adapter:
+    build: ./services/ollama-adapter
+    environment:
+      MODEL: qwen3:8b
+      OLLAMA_URL: ${PRIMARY_OLLAMA_URL:-http://host.docker.internal:11434}
+    extra_hosts: ["host.docker.internal:host-gateway"]
+    networks: [airlock-net]
+  ollama-fallback-adapter:
+    build: ./services/ollama-adapter
+    environment:
+      MODEL: qwen2.5-coder:1.5b
+      OLLAMA_URL: ${FALLBACK_OLLAMA_URL:-http://host.docker.internal:11434}
+    extra_hosts: ["host.docker.internal:host-gateway"]
+    networks: [airlock-net]
+
+  web:
+    build: ./web
+    environment: { NEXT_PUBLIC_API_URL: http://localhost:8001 }
+    depends_on: [api]
+    ports: ["3000:3000"]
+    networks: [airlock-net]
+
+networks:
+  airlock-net:
+    name: airlock-net
+    driver: bridge

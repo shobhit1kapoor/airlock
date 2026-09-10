@@ -1,0 +1,202 @@
+# Konnect AI Gateway entities. Secrets are referenced by local environment / Konnect,
+# never checked in. IDs are resolved by kongctl lookups after quickstart provisioning.
+ai_gateway_auth_strategies:
+  - ref: airlock-key-auth
+    ai_gateway: !lookup { id: !env KONNECT_AI_GATEWAY_ID }
+    name: airlock-key-auth
+    type: key-auth
+    display_name: Airlock key authentication
+    config:
+      key_names: [apikey]
+      key_in_header: true
+      key_in_query: false
+
+ai_gateway_consumers:
+  - ref: planner-agent
+    ai_gateway: !lookup { id: !env KONNECT_AI_GATEWAY_ID }
+    name: planner-agent
+    type: api-key
+    display_name: Planner Agent
+    credentials:
+      - ref: planner-agent-key
+        ai_gateway_consumer: !ref planner-agent
+        name: planner-agent-key
+        type: api-key
+        display_name: Planner Agent Key
+        api_key: !secret { source: !env PLANNER_AGENT_KEY }
+  - ref: research-agent
+    ai_gateway: !lookup { id: !env KONNECT_AI_GATEWAY_ID }
+    name: research-agent
+    type: api-key
+    display_name: Research Agent
+    credentials:
+      - ref: research-agent-key
+        ai_gateway_consumer: !ref research-agent
+        name: research-agent-key
+        type: api-key
+        display_name: Research Agent Key
+        api_key: !secret { source: !env RESEARCH_AGENT_KEY }
+  - ref: security-agent
+    ai_gateway: !lookup { id: !env KONNECT_AI_GATEWAY_ID }
+    name: security-agent
+    type: api-key
+    display_name: Security Agent
+    credentials:
+      - ref: security-agent-key
+        ai_gateway_consumer: !ref security-agent
+        name: security-agent-key
+        type: api-key
+        display_name: Security Agent Key
+        api_key: !secret { source: !env SECURITY_AGENT_KEY }
+  - ref: coding-agent
+    ai_gateway: !lookup { id: !env KONNECT_AI_GATEWAY_ID }
+    name: coding-agent
+    type: api-key
+    display_name: Coding Agent
+    credentials:
+      - ref: coding-agent-key
+        ai_gateway_consumer: !ref coding-agent
+        name: coding-agent-key
+        type: api-key
+        display_name: Coding Agent Key
+        api_key: !secret { source: !env CODING_AGENT_KEY }
+  - ref: approval-coding-agent
+    ai_gateway: !lookup { id: !env KONNECT_AI_GATEWAY_ID }
+    name: approval-coding-agent
+    type: api-key
+    display_name: Approval Coding Agent
+    credentials:
+      - ref: approval-coding-agent-key
+        ai_gateway_consumer: !ref approval-coding-agent
+        name: approval-coding-agent-key
+        type: api-key
+        display_name: Approval Coding Agent Key
+        api_key: !secret { source: !env APPROVAL_CODING_AGENT_KEY }
+
+# A group makes the destination policy explicit while relying on Kong's
+# authenticated-consumer group resolution. Only these two identities may reach
+# Coding; Research is deliberately absent.
+ai_gateway_consumer_groups:
+  - ref: coding-callers
+    ai_gateway: !lookup { id: !env KONNECT_AI_GATEWAY_ID }
+    name: coding-callers
+    display_name: Coding allowed callers
+    consumers: [planner-agent, security-agent]
+
+# Global, Kong-managed OpenTelemetry policy. It emits AI Gateway access logs
+# from the local data plane directly to Airlock's internal collector endpoint.
+ai_gateway_policies:
+  - ref: airlock-opentelemetry
+    ai_gateway: !lookup { id: !env KONNECT_AI_GATEWAY_ID }
+    display_name: Airlock native Kong OpenTelemetry
+    name: airlock-opentelemetry
+    type: opentelemetry
+    global: true
+    config:
+      access_logs:
+        endpoint: http://otel-collector:4318/v1/logs
+      resource_attributes:
+        service.name: airlock-kong-ai-gateway
+
+ai_gateway_model_providers:
+  - ref: ollama-primary-adapter
+    ai_gateway: !lookup { id: !env KONNECT_AI_GATEWAY_ID }
+    name: ollama-primary-adapter
+    display_name: Ollama primary adapter
+    type: ollama
+    config: { auth: { type: basic } }
+  - ref: ollama-fallback-adapter
+    ai_gateway: !lookup { id: !env KONNECT_AI_GATEWAY_ID }
+    name: ollama-fallback-adapter
+    display_name: Ollama fallback adapter
+    type: ollama
+    config: { auth: { type: basic } }
+
+# The model owns retry and priority selection. The app never selects a target.
+ai_gateway_models:
+  - ref: airlock-code-model
+    ai_gateway: !lookup { id: !env KONNECT_AI_GATEWAY_ID }
+    display_name: Airlock Code Model
+    name: airlock-code-model
+    type: model
+    formats: [{type: openai}]
+    capabilities: [generate]
+    access: { auth_strategies: [!ref airlock-key-auth] }
+    config:
+      route:
+        paths: ["/v1"]
+        model:
+          body_param: model
+          values: [airlock-code-model]
+      balancer:
+        algorithm: priority
+        retries: 1
+        max_fails: 1
+        # Chat completions are POST requests. non_idempotent explicitly permits
+        # Kong to replay a failed request to the lower-priority target.
+        failover_criteria: [error, http_500, http_502, http_503, http_504, timeout, non_idempotent]
+    targets:
+      - name: a-qwen3-primary
+        provider: ollama-primary-adapter
+        # Kong-owned tier 100 primary, with tier 10 fallback.
+        weight: 100
+        config: { type: ollama, upstream_url: http://ollama-primary-adapter:8020 }
+      - name: z-qwen25-fallback
+        provider: ollama-fallback-adapter
+        weight: 10
+        config: { type: ollama, upstream_url: http://ollama-fallback-adapter:8020 }
+
+ai_gateway_agents:
+  - ref: planner-a2a
+    ai_gateway: !lookup { id: !env KONNECT_AI_GATEWAY_ID }
+    display_name: Planner
+    name: planner-agent
+    type: a2a
+    access: { auth_strategies: [!ref airlock-key-auth], acls: { allow: [planner-agent, security-agent] } }
+    config: { url: http://planner-agent:8030, route: { paths: ["/a2a/planner"] }, logging: { payloads: true, statistics: true } }
+  - ref: research-a2a
+    ai_gateway: !lookup { id: !env KONNECT_AI_GATEWAY_ID }
+    display_name: Research
+    name: research-agent
+    type: a2a
+    access: { auth_strategies: [!ref airlock-key-auth], acls: { allow: [planner-agent, security-agent] } }
+    config: { url: http://research-agent:8030, route: { paths: ["/a2a/research"] }, logging: { payloads: true, statistics: true } }
+  - ref: security-a2a
+    ai_gateway: !lookup { id: !env KONNECT_AI_GATEWAY_ID }
+    display_name: Security
+    name: security-agent
+    type: a2a
+    access: { auth_strategies: [!ref airlock-key-auth], acls: { allow: [planner-agent, research-agent, coding-agent] } }
+    config: { url: http://security-agent:8030, route: { paths: ["/a2a/security"] }, logging: { payloads: true, statistics: true } }
+  - ref: coding-a2a
+    ai_gateway: !lookup { id: !env KONNECT_AI_GATEWAY_ID }
+    display_name: Coding
+    name: coding-agent
+    type: a2a
+    access: { auth_strategies: [!ref airlock-key-auth], acls: { allow: [coding-callers] } }
+    config: { url: http://coding-agent:8030, route: { paths: ["/a2a/coding"] }, logging: { payloads: true, statistics: true } }
+
+ai_gateway_mcp_servers:
+  - ref: airlock-git-upstream
+    ai_gateway: !lookup { id: !env KONNECT_AI_GATEWAY_ID }
+    display_name: Airlock Git MCP upstream
+    name: airlock-git-upstream
+    type: upstream-server
+    config:
+      url: http://mcp-server:8010/mcp
+      tools_cache_ttl_seconds: 30
+      route: { paths: ["/mcp/git/upstream"] }
+  - ref: airlock-git-listener
+    ai_gateway: !lookup { id: !env KONNECT_AI_GATEWAY_ID }
+    display_name: Airlock Git MCP
+    name: airlock-git-listener
+    type: listener
+    access:
+      auth_strategies: [airlock-key-auth]
+      acl_attribute_type: consumer
+      default_tool_acls:
+        allow: [planner-agent, research-agent, security-agent, coding-agent, approval-coding-agent]
+    config:
+      route: { paths: ["/mcp/git"] }
+      server: { preserve_upstream_tool_names: true }
+    sources: [airlock-git-upstream]
