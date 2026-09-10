@@ -1,0 +1,7 @@
+# Local HyperFrames preview and analysis artifacts
+.thumbnails/
+.waveform-cache/
+
+# Tool-generated guidance; the project source is documented in BRIEF.md.
+AGENTS.md
+CLAUDE.md
