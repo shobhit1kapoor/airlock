@@ -252,6 +252,7 @@ function DecisionBadge({ value }: { value?: string | number | null }) {
 }
 
 export default function Airlock() {
+  const [showLanding, setShowLanding] = useState(true);
   const [view, setView] = useState<View>("overview");
   const [events, setEvents] = useState<Event[]>([]);
   const [metrics, setMetrics] = useState<Metric[]>([]);
@@ -436,6 +437,16 @@ export default function Airlock() {
     ],
   };
   const current = headers[view];
+  if (showLanding) {
+    return (
+      <Landing
+        onEnter={(nextView) => {
+          setView(nextView);
+          setShowLanding(false);
+        }}
+      />
+    );
+  }
   return (
     <main className="app-shell">
       <aside className="app-sidebar">
@@ -578,6 +589,110 @@ export default function Airlock() {
           onDecide={decide}
           running={running}
         />
+      )}
+    </main>
+  );
+}
+
+function Landing({ onEnter }: { onEnter: (view: View) => void }) {
+  const [proofsOpen, setProofsOpen] = useState(false);
+
+  return (
+    <main className="landing-shell">
+      <div className="landing-video" aria-hidden="true">
+        <video autoPlay loop muted playsInline>
+          <source
+            src="https://d8j0ntlcm91z4.cloudfront.net/user_38xzZboKViGWJOttwIXH07lWA1P/hf_20260809_012548_ef22562c-c0ae-4816-ad9d-f8922af4e6a7.mp4"
+            type="video/mp4"
+          />
+        </video>
+      </div>
+      <div className="landing-scrim" aria-hidden="true" />
+      <div className="landing-grid" aria-hidden="true" />
+
+      <header className="landing-header">
+        <button
+          className="landing-mark"
+          onClick={() => onEnter("overview")}
+          aria-label="Open Airlock control center"
+        >
+          <LockKeyhole size={20} />
+        </button>
+        <nav className="landing-nav" aria-label="Landing page navigation">
+          <button onClick={() => onEnter("overview")}>Control center</button>
+          <button onClick={() => onEnter("agents")}>Policy graph</button>
+          <button onClick={() => onEnter("traffic")}>Evidence</button>
+        </nav>
+        <button className="landing-console-link" onClick={() => onEnter("overview")}>
+          Open console <ArrowRight size={14} />
+        </button>
+      </header>
+
+      <section className="landing-hero" aria-labelledby="landing-title">
+        <div className="landing-proof-row">
+          <span className="proof-orbit"><LockKeyhole size={14} /></span>
+          <span className="proof-orbit"><Network size={14} /></span>
+          <span className="proof-orbit"><ShieldAlert size={14} /></span>
+          <span className="landing-proof-copy">Kong AI Gateway + Agent Gateway</span>
+        </div>
+        <p className="landing-eyebrow">ZERO-TRUST AGENT OPERATIONS</p>
+        <h1 id="landing-title">
+          <span>Autonomy,</span>
+          <span>contained.</span>
+        </h1>
+        <p className="landing-subhead">
+          Airlock gives every agent a real identity, a narrow boundary, and an
+          evidence trail. Kong enforces the decision before sensitive work can run.
+        </p>
+        <div className="landing-actions">
+          <button className="landing-primary" onClick={() => onEnter("overview")}>
+            Open control center <ArrowRight size={16} />
+          </button>
+          <button
+            className="landing-secondary"
+            onClick={() => setProofsOpen(true)}
+          >
+            See the four live proofs
+          </button>
+        </div>
+      </section>
+
+      <footer className="landing-stats" aria-label="Airlock capabilities">
+        <div><span>01</span><strong>Every caller identified</strong><small>AI Consumer key authentication</small></div>
+        <div><span>02</span><strong>Every tool bounded</strong><small>Listener-mode MCP ACLs</small></div>
+        <div><span>03</span><strong>Every decision traced</strong><small>Native Kong OpenTelemetry</small></div>
+        <div><span>04</span><strong>Every exception explicit</strong><small>Server-side JIT approval grants</small></div>
+      </footer>
+
+      {proofsOpen && (
+        <div className="landing-dialog-backdrop" role="presentation" onClick={() => setProofsOpen(false)}>
+          <section
+            className="landing-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="proofs-title"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="landing-dialog-title">
+              <div>
+                <p className="landing-eyebrow">LIVE VALIDATION</p>
+                <h2 id="proofs-title">Four proofs, not promises.</h2>
+              </div>
+              <button className="landing-dialog-close" onClick={() => setProofsOpen(false)} aria-label="Close proofs">
+                <X size={17} />
+              </button>
+            </div>
+            <ol className="landing-proof-list">
+              <li><b>MCP denial</b><span>Research receives a Kong 403 for <code>delete_repository</code>; the upstream counter remains zero.</span></li>
+              <li><b>A2A denial</b><span>Research cannot send a task to Coding because Kong rejects the destination before delivery.</span></li>
+              <li><b>Just-in-time approval</b><span>A one-use server-side identity completes <code>create_branch</code> only after an operator grants it.</span></li>
+              <li><b>Model recovery</b><span>Kong retries a failed primary adapter and continues on the fallback model in the same request.</span></li>
+            </ol>
+            <button className="landing-primary" onClick={() => onEnter("attack")}>
+              Run the live proofs <ArrowRight size={16} />
+            </button>
+          </section>
+        </div>
       )}
     </main>
   );
