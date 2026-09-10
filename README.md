@@ -1,202 +1,265 @@
 # Airlock
 
-**Control what autonomous software can access.**
+> **Control what autonomous software can access.**
 
-Airlock is a zero-trust control plane for multi-agent software engineering workflows. It gives every agent a distinct identity, lets Kong enforce the agent’s permitted destinations and MCP tools, and retains trace-correlated evidence for an operator to inspect.
+Airlock is a zero-trust control plane for multi-agent software engineering workflows. It gives every agent its own Kong identity, constrains where that identity can communicate and which MCP tools it can invoke, and preserves trace-correlated proof for an operator to review.
 
-Airlock uses **Kong Konnect as the configuration control plane** and a **local Kong data plane as the enforcement point**. The web application, FastAPI API, agents, MCP server, PostgreSQL, OpenTelemetry Collector, and model adapters run locally on Docker network `airlock-net`. Ollama may remain on the Windows host and is reached through `host.docker.internal`.
+Airlock is built for the gap between a useful autonomous workflow and a safe one. The application does not decide whether an agent may reach a sensitive destination, use a destructive tool, or select a fallback model. **Kong does.**
 
-> Airlock is an evidence-led prototype, not a dashboard that merely describes policies. Its four primary demonstrations make real requests through Kong.
+**Built with Kong Konnect, Kong AI Gateway, Agent Gateway capabilities, AI Consumers, AI Auth Strategies, A2A AI Agents, AI MCP Server listeners, and native OpenTelemetry evidence.**
 
-## What it demonstrates
+---
 
-| Demonstration | Real request | Kong-enforced result | Proof shown in Airlock |
-| --- | --- | --- | --- |
-| Destructive MCP denial | Research calls MCP `tools/call(delete_repository)` | HTTP `403`; request is not forwarded upstream | Kong OTEL log, matching audit row, destructive tool counter stays `0` |
-| A2A destination denial | Research sends JSON-RPC `message/send` to Coding | HTTP `403` before Coding receives it | Kong OTEL log, matching audit row, Coding received-counter unchanged |
-| Human-approved branch creation | Coding requests `create_branch`; operator approves once | Backend-only approval identity makes one privileged MCP call | persisted grant, trace ID, successful tool call, consumed grant |
-| Kong-owned model recovery | Primary Ollama adapter returns `503` | Kong retries the same client request on the fallback target | primary and fallback adapter counters plus a successful workflow response |
+## Why Airlock
+
+Autonomous systems are powerful because they can make decisions and take actions. That creates a different security problem from a conventional web application:
+
+- An agent can be redirected to a destructive tool.
+- A research agent can attempt to contact an implementation agent it was never meant to reach.
+- A normal coding identity can accidentally gain a write capability.
+- Application-level fallback logic can hide failed model routing from the gateway.
+- A dashboard can claim a request was blocked without proving that its upstream never received it.
+
+Airlock turns each of those concerns into an enforceable gateway boundary and a live, inspectable proof.
+
+## Submission at a glance
+
+| What a judge can verify | How Airlock proves it |
+| --- | --- |
+| **Distinct agent identity** | Five independent Kong AI Consumers use key-auth; the approval identity remains server-side. |
+| **Real MCP enforcement** | Research makes a real MCP JSON-RPC `tools/call(delete_repository)` through Kong and receives `403`. The MCP server counter remains `0`. |
+| **Real A2A enforcement** | Research sends A2A JSON-RPC `message/send` to Coding. Kong rejects it before Coding’s upstream handler sees it. |
+| **Human approval without a bypass** | A persisted grant lets FastAPI use a narrowly privileged identity once; the request still passes through Kong. |
+| **Kong-owned resilience** | Kong retries one failed model request from a primary Ollama adapter to a lower-priority fallback. FastAPI observes the result; it never selects the fallback. |
+| **Evidence, not invented telemetry** | Kong emits OpenTelemetry access logs. Airlock ingests them, joins them to the same trace ID, and shows the projection beside the gateway event. |
+
+## Product preview
+
+### Landing page
+
+The entry page explains the product in one view and has one intentional action: open the working control panel.
+
+![Airlock landing page](docs/assets/airlock-landing.png)
+
+### Overview: policy, identity, and live evidence
+
+The Overview is an operator’s starting point. It makes the current policy state, active identities, recent gateway evidence, and provenance visible without turning the product into a decorative dashboard.
+
+![Airlock overview showing Konnect policy state and live evidence](docs/assets/airlock-overview.png)
+
+### Agent graph: enforceable destinations
+
+Coding accepts Planner and Security but not Research. The diagram represents a Kong consumer-group allow list, not a convention in application code.
+
+![Airlock agent graph showing Research denied before Coding](docs/assets/airlock-agent-graph.png)
+
+### Attack Lab: four live proofs
+
+Attack Lab is intentionally narrow. Each action sends traffic through the local Kong data plane and produces trace-correlated evidence in the console.
+
+![Airlock Attack Lab with the four live validation scenarios](docs/assets/airlock-attack-lab.png)
+
+### Traffic & Audit: source-aware evidence
+
+Every event carries a provenance label. A native Kong telemetry record is not represented as an application-generated event.
+
+![Airlock Traffic and Audit view with native Kong evidence](docs/assets/airlock-traffic-audit.png)
+
+---
 
 ## Architecture
 
-```text
-                                      KONNECT CONTROL PLANE
-                             AI Gateway entities, policy, visibility
-                                               │
-                                    manages local data plane
-                                               │
-┌────────────────────────────────── airlock-net ──────────────────────────────────┐
-│ Browser → Next.js operator console → FastAPI control API                         │
-│                                        │                                         │
-│                                        │ trace-correlated request                │
-│                                        ▼                                         │
-│                              Local Kong data plane                               │
-│                  authenticate → authorize → proxy → retry → emit OTEL            │
-│                    ┌──────────────────┼───────────────────┐                     │
-│                    ▼                  ▼                   ▼                     │
-│               AI Model            MCP listener          A2A agents               │
-│                    │                  │                   │                     │
-│              Ollama adapters       Git MCP server   Planner / Research /         │
-│                    │                             Security / Coding               │
-│                    └───── host.docker.internal:11434 ──────► Ollama              │
-│                                                                            │      │
-│ Kong OTLP logs → OpenTelemetry Collector → FastAPI OTLP ingestion → PostgreSQL  │
-│                                                                    │              │
-│                                                                    └── SSE → UI   │
-└─────────────────────────────────────────────────────────────────────────────────┘
-```
-
-### Control plane and data plane responsibilities
-
-| Component | Responsibility | Where it runs |
-| --- | --- | --- |
-| Konnect | Stores and manages AI Gateway entities and policy | Kong-hosted control plane |
-| Kong data plane | Resolves consumer identity, evaluates ACLs, forwards traffic, retries models, emits telemetry | Local Kong quickstart data plane |
-| FastAPI | Starts test requests, persists approvals and projections, consumes OTLP, streams SSE | Docker |
-| Next.js | Operator console: Overview, Agent Graph, Attack Lab, Approvals, MCP Tools, Models, Traffic & Audit | Docker |
-| PostgreSQL | Durable approval and event projection store | Docker |
-| MCP / A2A services | Small upstreams designed to prove whether Kong actually forwarded a request | Docker |
-| Ollama | Local models | Windows host |
-
-## Kong configuration model
-
-[`kong/airlock.yaml`](kong/airlock.yaml) is the checked-in source of truth for the current Kong AI Gateway entity model. It avoids application-owned authorization and legacy route-only approximations.
-
-### Authentication and consumer identity
-
-Airlock creates one key-auth AI Auth Strategy, `airlock-key-auth`, and attaches it to every protected entity:
-
-- `airlock-code-model` (AI Model)
-- Planner, Research, Security, and Coding (A2A AI Agents)
-- Git MCP listener (AI MCP Server)
-
-Every caller supplies an `apikey`. Kong resolves it to an AI Consumer **before** evaluating an ACL.
-
-| AI Consumer | Purpose | Credential boundary |
-| --- | --- | --- |
-| `planner-agent` | Starts permitted work | local agent runtime |
-| `research-agent` | Reads and searches repository context | local agent runtime |
-| `security-agent` | Reviews risk and may contact Coding | local agent runtime |
-| `coding-agent` | Performs normal bounded work | local agent runtime |
-| `approval-coding-agent` | Executes an approved branch operation | **FastAPI only** |
-
-The `approval-coding-agent` key is never returned by an API and never reaches the browser or a normal agent runtime.
-
-### A2A policy
-
-Each upstream agent serves an Agent Card at `/.well-known/agent-card.json` and accepts JSON-RPC `message/send`. Kong exposes them as A2A AI Agent entities.
-
-Coding uses an explicit allow-list Consumer Group named `coding-callers`. That group contains only `planner-agent` and `security-agent`; it deliberately excludes `research-agent`.
+Konnect provides the configuration surface and manages the local data plane. The application, agents, tools, PostgreSQL, adapters, and observability pipeline remain local on one Docker network: `airlock-net`.
 
 ```text
-Planner  ─────────────── allow ──► Coding
-Security ─────────────── allow ──► Coding
-Research ───── Kong 403 / deny ──► Coding upstream never receives the message
+                                  KONNECT CONTROL PLANE
+                     AI Gateway entities, policy, configuration, visibility
+                                             │
+                                  manages local data plane
+                                             │
+┌──────────────────────────────────────── airlock-net ───────────────────────────────────────┐
+│ Browser → Next.js control panel → FastAPI control API                                         │
+│                                         │                                                     │
+│                                         ▼                                                     │
+│                              LOCAL KONG DATA PLANE                                            │
+│                  authenticate → authorize → proxy → retry → emit OTEL                         │
+│                          ┌──────────────┼───────────────┐                                     │
+│                          ▼              ▼               ▼                                     │
+│                     AI Model       MCP listener      A2A AI Agents                             │
+│                          │              │               │                                     │
+│                    Ollama adapters   Git MCP       Planner / Research /                         │
+│                          │             server      Security / Coding                            │
+│                          └──── host.docker.internal:11434 ─────► Ollama                        │
+│                                                                                               │
+│ Kong OTLP logs → OpenTelemetry Collector → FastAPI OTLP ingestion → PostgreSQL → SSE → UI    │
+└───────────────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
-This means the A2A denial is not an application convention. It is a gateway decision made before the Coding agent’s upstream handler executes.
+### Runtime ownership
 
-### MCP listener and tool policy
+| Layer | Responsibility | Runs where |
+| --- | --- | --- |
+| **Kong Konnect** | AI Gateway entity configuration and management surface | Kong-hosted control plane |
+| **Local Kong data plane** | Consumer resolution, ACL evaluation, MCP/A2A/model routing, retry/failover, native telemetry | Local, Konnect-controlled data plane |
+| **FastAPI** | Starts demonstrations, owns approval records, ingests OTLP, persists projections, serves SSE | Docker |
+| **Next.js** | Landing page and operator UI: Overview, Agent Graph, Attack Lab, Approvals, MCP Tools, Models, Traffic & Audit | Docker |
+| **PostgreSQL** | Durable workflow, approval, grant, event-projection, and trace state | Docker |
+| **MCP / A2A upstreams** | Instrumented upstreams that prove whether Kong actually forwarded a request | Docker |
+| **Ollama** | Local `qwen3:8b` and `qwen2.5-coder:1.5b` model runtime | Windows host via `host.docker.internal` |
 
-Airlock uses an AI MCP Server listener, not a custom destructive REST route. The exact tool names are consistent across policy, tests, evidence, and the upstream MCP server:
+## What Kong enforces
 
-- `read_repository`
-- `search_code`
-- `create_branch`
-- `delete_repository`
+### 1. AI Auth Strategy and machine identity
 
-[`kong/mcp-passthrough.json`](kong/mcp-passthrough.json) defines consumer-based default and per-tool listener rules:
+[`kong/airlock.yaml`](kong/airlock.yaml) is the checked-in definition for Airlock’s current Kong AI Gateway entity model. It declares the shared key-auth AI Auth Strategy `airlock-key-auth` and attaches it to every protected resource:
 
-| Tool | Access policy |
-| --- | --- |
-| `read_repository` | Normal authenticated consumers allowed |
-| `search_code` | Normal authenticated consumers allowed |
-| `create_branch` | `approval-coding-agent` only |
-| `delete_repository` | `security-agent` only; Research is denied |
+- the `airlock-code-model` AI Model;
+- Planner, Research, Security, and Coding A2A AI Agents;
+- the Git AI MCP Server listener.
 
-The listener preserves upstream tool names. A blocked `delete_repository` request therefore produces a Kong `403`, while the MCP server’s own `delete_repository` counter proves that the forbidden tool never executed.
+Each caller sends an `apikey`. Kong resolves that key to an AI Consumer **before** it evaluates access controls.
 
-### Kong-owned model routing and failover
+| AI Consumer | Role | Credential location |
+| --- | --- | --- |
+| `planner-agent` | starts approved work and delegates | Planner runtime only |
+| `research-agent` | reads and searches repository context | Research runtime only |
+| `security-agent` | assesses risk and can contact Coding | Security runtime only |
+| `coding-agent` | performs normal bounded work | Coding runtime only |
+| `approval-coding-agent` | makes one approved branch request | **FastAPI only; never browser or agent runtime** |
 
-`airlock-code-model` has two priority targets managed by Kong:
+### 2. A2A destination allow lists
+
+Every upstream A2A agent exposes an Agent Card at `/.well-known/agent-card.json` and accepts A2A JSON-RPC `message/send` requests. Kong exposes those services as A2A AI Agent entities.
+
+Coding has an explicit allow-list Consumer Group called `coding-callers`. Only `planner-agent` and `security-agent` belong to it.
+
+```text
+Planner   ───────────── allow ───────► Coding
+Security  ───────────── allow ───────► Coding
+Research  ─── Kong 403 / denied ─────► Coding upstream receives nothing
+```
+
+This is the core A2A claim: Research does not merely receive a polite application error. Kong rejects the request before it reaches Coding.
+
+### 3. Listener-mode MCP policy
+
+Airlock uses an AI MCP Server listener with consumer-based defaults and per-tool ACLs. It uses actual MCP JSON-RPC `tools/call` traffic; there is no invented destructive REST endpoint.
+
+| MCP tool | Consumer policy | Why it matters |
+| --- | --- | --- |
+| `read_repository` | authenticated consumers | normal repository discovery |
+| `search_code` | authenticated consumers | normal repository discovery |
+| `create_branch` | `approval-coding-agent` only | normal Coding cannot write without a grant |
+| `delete_repository` | `security-agent` only | Research attack is rejected before execution |
+
+The listener preserves upstream tool names. In the destructive demonstration, Research calls `delete_repository`; Kong returns `403`, Airlock records the trace, and the MCP server’s `delete_repository` invocation counter stays at `0`.
+
+### 4. Kong-owned model routing and recovery
+
+Airlock defines one AI Model with two Ollama-backed targets. Priority and retry behavior belong to Kong:
 
 | Target | Adapter | Priority / weight | Model |
 | --- | --- | --- | --- |
 | Primary | `ollama-primary-adapter` | `100` | `qwen3:8b` |
 | Fallback | `ollama-fallback-adapter` | `10` | `qwen2.5-coder:1.5b` |
 
-The model configuration uses priority balancing, one retry, and explicit failure criteria including `http_503` and `non_idempotent`. The latter explicitly permits retrying an eligible failed POST chat-completion request on the fallback target.
-
-FastAPI sends one request. It does **not** select the fallback. The adapter services expose a fault switch and counters solely to make this evidence visible:
+The model configuration enables priority balancing, one retry, and explicit failure criteria including `http_503` and `non_idempotent`, allowing the failed OpenAI-compatible POST request to be retried appropriately.
 
 ```text
-one client request
-  → primary adapter attempts qwen3:8b
-  → primary returns 503
-  → Kong retries the same request
-  → fallback adapter attempts qwen2.5-coder:1.5b
-  → workflow succeeds
+FastAPI makes one model request
+  → Kong tries qwen3:8b through the primary adapter
+  → Attack Lab makes the primary return 503
+  → Kong retries on qwen2.5-coder:1.5b through the fallback adapter
+  → one client workflow succeeds
 ```
 
-## Human approval model
+The adapter services expose only a controlled fault switch and request counters. They make routing evidence visible; they do not decide which model should run.
 
-Kong enforces access; Airlock owns the human approval workflow. This separation matters.
+---
 
-1. `coding-agent` requests `create_branch` and Airlock stores a `PENDING` approval in PostgreSQL.
-2. An operator chooses **Approve once** or a time-bound approval.
-3. FastAPI, and only FastAPI, uses `approval-coding-agent` to make the approved MCP request through Kong.
-4. A successful one-use request changes the persisted grant to `CONSUMED`. Time-bound grants retain an explicit expiry.
+## Four live demonstrations
 
-Kong is still in the path of the privileged request. Airlock never grants a browser-side bypass.
+These are the MVP. The project deliberately avoids padding the submission with partly simulated prompt injection, token exhaustion, rate limiting, or extra agents until these gateway proofs work end-to-end.
 
-## Telemetry, audit, and provenance
+### 1. Destructive MCP denial
 
-Kong’s global OpenTelemetry policy exports native access logs to the local `otel-collector`. The collector forwards those records to FastAPI’s `/v1/logs` OTLP endpoint. FastAPI persists a trace-correlated projection in PostgreSQL and streams changes to the dashboard with server-sent events.
+1. Research sends a real MCP JSON-RPC `tools/call` for `delete_repository` through Kong.
+2. Kong resolves Research’s AI Consumer and evaluates the per-tool listener ACL.
+3. Kong returns `403`.
+4. The `delete_repository` upstream invocation counter remains `0`.
+5. Kong emits native telemetry; Airlock saves a trace-correlated audit projection.
+
+**Judge check:** a `403` alone is not the proof. Check the zero upstream counter and matching Kong telemetry record.
+
+### 2. A2A destination denial
+
+1. Research sends an A2A `message/send` request to Coding.
+2. Kong authenticates Research, evaluates Coding’s allow list, and rejects the destination.
+3. Coding’s received-message counter does not change.
+4. The trace appears in Traffic & Audit as gateway evidence plus the Airlock audit projection.
+
+**Judge check:** Planner → Coding succeeds in the smoke suite; Research → Coding fails. The boundary is identity-specific, not a global route block.
+
+### 3. Approval-gated branch creation
+
+1. `coding-agent` requests `create_branch` using an identity that cannot call it.
+2. Airlock persists a `PENDING` approval in PostgreSQL.
+3. An operator grants **Approve once** or a time-bound capability.
+4. FastAPI alone uses `approval-coding-agent` to invoke `create_branch` through Kong.
+5. A one-use approval becomes `CONSUMED` after a successful call. A timed grant carries and enforces an expiry.
+
+**Judge check:** the privileged credential is never exposed to the browser and is not handed to the normal coding runtime.
+
+### 4. Kong-owned model failover
+
+1. Attack Lab faults `ollama-primary-adapter` so it returns `503`.
+2. The next model request goes to Kong once.
+3. Kong retries to `ollama-fallback-adapter`.
+4. Counters show primary attempted/failed and fallback attempted/succeeded.
+5. The workflow continues without FastAPI choosing a target.
+
+**Judge check:** inspect the two adapter counters and successful response under the same client workflow, not an app-initiated second request.
+
+---
+
+## Evidence and provenance
+
+Airlock does not insert fake Kong events after normal application requests. Kong’s global OpenTelemetry policy sends native access logs to the internal `otel-collector`; the collector forwards them to FastAPI’s OTLP endpoint at `/v1/logs`.
 
 Correlation sequence:
 
-1. Airlock starts a demonstration with `X-Airlock-Trace-Id`.
-2. The request passes through Kong, which adds a request ID and exports OTLP evidence.
-3. Airlock receives the OTLP record and joins it to the local audit projection using trace ID and, where present, Kong request ID.
-
-The dashboard labels every event to make provenance clear:
+1. Airlock starts a live demonstration with `X-Airlock-Trace-Id`.
+2. Kong processes the request, creates its own request context, and exports OTLP evidence.
+3. FastAPI ingests that event and joins it with an operator projection by trace ID and, where present, Kong request ID.
+4. SSE updates the UI without requiring a browser refresh.
 
 | Label | Meaning |
 | --- | --- |
-| `LIVE` | Generated by a current request, telemetry record, or operator action |
-| `HISTORICAL` | Restored from persisted PostgreSQL state after restart |
-| `SIMULATION` | Reserved for non-live data and never presented as Kong-originated proof |
+| `LIVE` | generated by a current request, native telemetry record, or operator action |
+| `HISTORICAL` | restored from PostgreSQL after a restart |
+| `SIMULATION` | non-live data; never presented as Kong-originated proof |
 
-## Repository layout
+## Demo script for judges
 
-```text
-airlock/
-├── api/                         FastAPI API, persistence, SSE, OTLP ingestion
-├── kong/
-│   ├── airlock.yaml             Konnect AI Gateway entities
-│   ├── mcp-passthrough.json     listener-mode MCP per-tool rules
-│   └── kong.local.yml           minimal local UI/API fallback only
-├── services/
-│   ├── a2a-agent/               Agent Card, JSON-RPC handler, counter
-│   ├── mcp-server/              MCP upstream and exact-tool counters
-│   └── ollama-adapter/          faultable Ollama adapters and counters
-├── web/                         Next.js operator console
-├── scripts/                     Konnect bootstrap and end-to-end smoke suite
-├── otel-collector-config.yaml   OTLP log pipeline
-├── docker-compose.yml           local runtime on airlock-net
-└── videos/                      demo-video project source; generated renders ignored
-```
+1. Open `http://localhost:3000` and choose **Open control panel**.
+2. On **Overview**, inspect the policy state and recent evidence stream.
+3. Open **Agent graph**. Show that only Planner and Security have an allowed path to Coding.
+4. In **Attack Lab**, run **Destructive MCP denial**. Open the result and then **Traffic & Audit** to show the `403`, trace, and counter evidence.
+5. Run **A2A destination denial**. Explain that Coding did not receive the message.
+6. Run **Approval-gated branch**, open **Approvals**, and choose **Approve once**. Show the consumed grant and successful privileged request.
+7. Run **Kong-owned model recovery**. Show primary failure, fallback success, and workflow continuation.
+8. Finish in **Traffic & Audit**, filtering `LIVE` events and opening a record to inspect trace details.
 
-## Prerequisites
+## Local setup
+
+### Prerequisites
 
 - Docker Desktop with Linux containers and Docker Compose v2
 - Windows host with [Ollama](https://ollama.com/) running
-- Local models: `qwen3:8b` and `qwen2.5-coder:1.5b`
+- `qwen3:8b` and `qwen2.5-coder:1.5b` installed locally
 - Kong Konnect account and a local-only personal access token
 - `kongctl`
 - PowerShell for the smoke suite; WSL is recommended for the Kong quickstart wrapper
-
-## Local setup
 
 ### 1. Create local configuration
 
@@ -204,30 +267,28 @@ airlock/
 Copy-Item .env.example .env
 ```
 
-Set `KONNECT_TOKEN`, `KONNECT_AI_GATEWAY_ID`, and five distinct consumer keys. Never reuse one key between agents. In WSL, a suitable local value can be generated with `openssl rand -hex 32`.
+Set `KONNECT_TOKEN`, `KONNECT_AI_GATEWAY_ID`, and five different consumer keys. Never reuse an agent key. `.env`, generated mTLS material, local data-plane credentials, and Konnect bootstrap files are ignored by Git.
 
-`.env`, `.konnect-bootstrap/`, and `kong/konnect-data-plane.env` are intentionally ignored by Git.
+### 2. Provision the Konnect-controlled data plane
 
-### 2. Provision the Konnect-controlled local data plane
-
-From WSL, make the local PAT available and run:
+From WSL:
 
 ```bash
 export KONNECT_TOKEN='your-local-token'
 ./scripts/bootstrap-konnect.sh
 ```
 
-This wraps Kong’s AI Gateway quickstart and creates the Konnect-connected local data plane. Generated mTLS material is local-only. The local proxy is exposed on host port `18000`.
+The wrapper follows Kong’s AI Gateway quickstart model: Konnect is the control plane and the data plane is local. It exposes the local proxy on port `18000`.
 
-> `kong/kong.local.yml` is for local UI/API development. The four live demonstrations require the Konnect-managed entities in `kong/airlock.yaml`.
+> `kong/kong.local.yml` is a minimal local UI/API fallback. The four evidence demonstrations require the Konnect-managed definitions in `kong/airlock.yaml`.
 
-### 3. Apply AI Gateway entities
+### 3. Apply Airlock’s AI Gateway definitions
 
 ```powershell
 kongctl apply -f kong/airlock.yaml --pat $env:KONNECT_TOKEN --auto-approve
 ```
 
-Apply the MCP passthrough-listener rules with the equivalent request in [`scripts/create-mcp-passthrough.sh`](scripts/create-mcp-passthrough.sh). Run it in an environment where `KONNECT_TOKEN`, `KONNECT_AI_GATEWAY_ID`, and `kong/mcp-passthrough.json` are available.
+Apply the listener-mode MCP rules using [`scripts/create-mcp-passthrough.sh`](scripts/create-mcp-passthrough.sh) where `KONNECT_TOKEN`, `KONNECT_AI_GATEWAY_ID`, and [`kong/mcp-passthrough.json`](kong/mcp-passthrough.json) are available.
 
 ### 4. Prepare local models
 
@@ -236,7 +297,7 @@ ollama pull qwen3:8b
 ollama pull qwen2.5-coder:1.5b
 ```
 
-Adapters call `host.docker.internal:11434` by default. Override `PRIMARY_OLLAMA_URL` or `FALLBACK_OLLAMA_URL` in `.env` only when necessary.
+The adapters call `host.docker.internal:11434` by default. Override `PRIMARY_OLLAMA_URL` or `FALLBACK_OLLAMA_URL` in `.env` only when necessary.
 
 ### 5. Start Airlock
 
@@ -246,26 +307,16 @@ docker compose up --build
 
 Open:
 
-- Control Center: `http://localhost:3000`
+- Control panel: `http://localhost:3000`
 - API health: `http://localhost:8001/health`
 - Kong proxy: `http://localhost:18000`
 
-All Docker services join `airlock-net`; Ollama is the intentional host-side exception.
-
-## Demo flow
-
-Use **Attack lab** to run all four live proofs. Each run opens a detailed result sheet and writes evidence to **Traffic & audit**.
-
-1. **Destructive MCP denial**: Research calls `delete_repository`; expect Kong `403` and upstream counter `0`.
-2. **A2A destination denial**: Research sends `message/send` to Coding; expect Kong `403` and no Coding receipt.
-3. **Approval-gated branch**: create a request, open **Approvals**, then use **Approve once**; expect the server-only approval identity and a consumed grant.
-4. **Kong-owned model recovery**: force the primary adapter failure; expect a successful retry through the fallback target without FastAPI model selection.
-5. **Traffic & audit**: inspect the matching trace record and its native Kong attributes.
+All Docker services are on `airlock-net`; Ollama is the deliberate host-side exception.
 
 ## Verification
 
 ```powershell
-# Start the full local runtime.
+# Start or rebuild the complete local runtime.
 docker compose up -d --build
 
 # Backend contract tests.
@@ -277,19 +328,47 @@ npm install
 npm run build
 Pop-Location
 
-# End-to-end Konnect-connected validation.
+# End-to-end evidence suite.
 .\scripts\smoke.ps1
 ```
 
-The smoke suite proves an allowed Planner → Coding message, a denied Research → Coding message, a blocked destructive MCP tool with counter `0`, approval consumption, and model primary/fallback evidence.
+The smoke suite verifies:
 
-## Operational and security notes
+- Planner → Coding A2A delivery is allowed.
+- Research → Coding A2A returns `403` and does not reach Coding.
+- Research → `delete_repository` returns `403` and the destructive MCP counter stays `0`.
+- One-time branch approval is consumed after the privileged call.
+- The primary model attempt fails once, the fallback succeeds once, and the client sees a successful workflow.
 
-- Do not commit Konnect PATs, generated data-plane credentials, `.env`, or real consumer keys.
-- Do not represent historical or simulated records as native Kong telemetry.
-- The local-first architecture is intentional: a production deployment would need managed secrets, encrypted storage, hardened network policies, a durable OTLP collector, and a production model runtime before it should be exposed publicly.
-- Generated recordings, video renders, screenshots, caches, and `node_modules` are ignored by Git. The video source and recording script are retained.
+## Repository layout
 
-## Project scope
+```text
+airlock/
+├── api/                         FastAPI control API, persistence, SSE, OTLP ingestion
+├── docs/assets/                 real README screenshots captured from the running product
+├── kong/
+│   ├── airlock.yaml             Konnect AI Gateway entities and policy
+│   ├── mcp-passthrough.json     listener-mode MCP per-tool ACLs
+│   └── kong.local.yml           minimal local-only fallback
+├── services/
+│   ├── a2a-agent/               Agent Card, A2A JSON-RPC handler, receipt counter
+│   ├── mcp-server/              MCP upstream and exact-tool invocation counters
+│   └── ollama-adapter/          faultable model adapters and request counters
+├── web/                         Next.js landing page and operator console
+├── scripts/                     Konnect bootstrap, MCP setup, smoke validation
+├── otel-collector-config.yaml   native Kong OTLP pipeline
+├── docker-compose.yml           complete local runtime on airlock-net
+└── videos/                      demo source; generated renders remain local-only
+```
 
-Airlock deliberately freezes scope around four complete, provable flows rather than adding unverified prompt-injection, token-exhaustion, rate-limit, or extra-agent simulations. The value proposition is clear enforcement with evidence: identity, policy, decision, upstream proof, and trace correlation.
+## Security boundaries and limitations
+
+- Do not commit a Konnect PAT, consumer credential, `.env`, generated data-plane material, or local bootstrap output.
+- The `approval-coding-agent` credential is server-side. A successful UI action is not a browser-side permission bypass.
+- The current deployment is a local-first hackathon implementation. A production rollout would require managed secret storage, hardened network policy, a durable OTLP collector, production identity lifecycle controls, and a production model runtime.
+- Airlock does not treat seeded, historical, or simulated events as live Kong evidence. The visible provenance label is part of the product’s trust model.
+- Scope is intentionally frozen around four complete gateway demonstrations. Prompt injection, token exhaustion, rate limiting, and additional agents are deferred rather than represented with partial simulations.
+
+## The central idea
+
+An agent should not be trusted merely because the app calls it Research, Coding, or Security. Airlock makes that role concrete at the gateway: an authenticated consumer identity, an explicit route and tool boundary, a constrained approval path, and evidence that the boundary held.
