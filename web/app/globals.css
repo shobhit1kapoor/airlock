@@ -1715,3 +1715,187 @@ p {
   .landing-header, .landing-proof-row, .landing-hero h1 span, .landing-subhead, .landing-actions, .landing-stats, .landing-dialog { animation: none; }
   .landing-video video { display: none; }
 }
+
+/* A restrained, single-viewport composition for the public Airlock entry page. */
+.landing-prompt {
+  --landing-ink: #fff;
+  --landing-muted: #d0d0d0;
+  --landing-line: rgba(255,255,255,.4);
+  min-height: 0;
+  padding: clamp(16px, 2.4vh, 28px) clamp(14px, 3vw, 32px);
+  background: #000;
+}
+.landing-prompt .landing-video { background: #000; }
+.landing-prompt .landing-video video {
+  opacity: .44;
+  filter: saturate(.72) contrast(1.06) brightness(.46);
+  transform: none;
+}
+.landing-prompt .landing-scrim {
+  background: rgba(0,0,0,.43);
+}
+.landing-prompt .landing-grid { display: none; }
+.landing-prompt .landing-header {
+  width: min(100%, 720px);
+  justify-content: center;
+  gap: clamp(18px, 2.8vw, 28px);
+}
+.landing-prompt .landing-mark,
+.landing-prompt .landing-header-space {
+  width: clamp(40px, 4.4vw, 46px);
+  height: clamp(40px, 4.4vw, 46px);
+  flex: none;
+}
+.landing-prompt .landing-mark {
+  border: 0;
+  color: #111;
+  background: #fff;
+  box-shadow: 0 4px 14px rgba(0,0,0,.16);
+}
+.landing-prompt .landing-nav {
+  height: clamp(44px, 5.2vw, 48px);
+  max-width: 430px;
+  flex: 1;
+  justify-content: space-around;
+  padding: 4px 8px;
+  border: 0;
+  border-radius: 999px;
+  background: #fff;
+  box-shadow: 0 4px 14px rgba(0,0,0,.16);
+}
+.landing-prompt .landing-nav span {
+  position: relative;
+  padding: 8px 10px;
+  color: #2e2e2e;
+  font-size: clamp(12px, 1.4vw, 14px);
+  font-weight: 500;
+  letter-spacing: -.01em;
+  opacity: .5;
+}
+.landing-prompt .landing-nav .landing-nav-active { opacity: 1; }
+.landing-prompt .landing-nav .landing-nav-active::after {
+  content: "";
+  position: absolute;
+  width: 3px;
+  height: 3px;
+  left: 50%;
+  bottom: 2px;
+  border-radius: 50%;
+  background: #000;
+  box-shadow: -5px 0 #000, 5px 0 #000;
+}
+.landing-prompt .landing-hero {
+  max-width: 900px;
+  margin-top: 0;
+}
+.landing-prompt .landing-proof-row {
+  --trust-size: clamp(36px, 4.5vw, 42px);
+  height: var(--trust-size);
+  margin-bottom: clamp(16px, 2.5vh, 26px);
+}
+.landing-prompt .proof-orbit {
+  width: var(--trust-size);
+  height: var(--trust-size);
+  margin-left: calc(var(--trust-size) * -.42);
+  padding: 5px;
+  color: #111;
+  border: 1px solid rgba(255,255,255,.4);
+  background: #28282a;
+  box-shadow: none;
+}
+.landing-prompt .proof-orbit svg {
+  width: 100%;
+  height: 100%;
+  padding: 5px;
+  border-radius: 50%;
+  background: #fff;
+}
+.landing-prompt .proof-orbit:first-child { margin-left: 0; z-index: 1; }
+.landing-prompt .proof-orbit:nth-child(2) { z-index: 2; background: #28282a; }
+.landing-prompt .proof-orbit:nth-child(3) { z-index: 3; background: #28282a; }
+.landing-prompt .landing-proof-copy {
+  height: var(--trust-size);
+  margin-left: calc(var(--trust-size) * -.42);
+  padding: 0 15px 0 calc(var(--trust-size) * .58);
+  color: #c4c2c3;
+  border-color: rgba(255,255,255,.4);
+  background: #28282a;
+  font-size: clamp(12px, 1.4vw, 13.5px);
+  backdrop-filter: none;
+}
+.landing-prompt .landing-eyebrow { display: none; }
+.landing-prompt .landing-hero h1 {
+  color: #fff;
+  font-family: "BubbledotICG-FinePos", "DM Mono", monospace;
+  font-size: clamp(30px, 6.2vw, 80px);
+  font-weight: 400;
+  line-height: 1.12;
+  letter-spacing: -.04em;
+}
+.landing-prompt .landing-subhead {
+  max-width: min(510px, 92%);
+  margin-top: clamp(16px, 2.5vh, 23px);
+  color: #d0d0d0;
+  opacity: .8;
+  font-size: clamp(14px, 1.55vw, 17px);
+  line-height: 1.55;
+}
+.landing-prompt .landing-actions { margin-top: clamp(19px, 3vh, 28px); }
+.landing-prompt .landing-primary {
+  min-height: 0;
+  padding: clamp(11px, 1.6vh, 13px) clamp(22px, 3vw, 28px);
+  color: #000;
+  border: 0;
+  background: #fff;
+  font-size: clamp(13px, 1.5vw, 14.5px);
+  font-weight: 600;
+  box-shadow: 0 0 0 1px rgba(255,255,255,.15), 0 0 22px rgba(255,255,255,.32), 0 0 44px rgba(255,255,255,.12);
+}
+.landing-prompt .landing-primary:hover {
+  transform: translateY(-2px) scale(1.02);
+  box-shadow: 0 0 0 1px rgba(255,255,255,.2), 0 0 30px rgba(255,255,255,.4), 0 0 52px rgba(255,255,255,.16);
+}
+.landing-prompt .landing-stats {
+  max-width: 920px;
+  border-top: 0;
+  gap: clamp(12px, 4vw, 50px);
+}
+.landing-prompt .landing-stats > div {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  column-gap: 9px;
+  padding: 0;
+  border-left: 0;
+}
+.landing-prompt .landing-stats span {
+  grid-row: span 2;
+  margin: 0;
+  color: #fff;
+  font-family: "BubbledotICG-FinePos", "DM Mono", monospace;
+  font-size: clamp(20px, 3vw, 30px);
+  line-height: 1;
+  letter-spacing: -.07em;
+}
+.landing-prompt .landing-stats strong {
+  align-self: end;
+  color: #fff;
+  font-size: clamp(15px, 2vw, 22px);
+  font-weight: 500;
+  letter-spacing: -.025em;
+}
+.landing-prompt .landing-stats small {
+  margin-top: 2px;
+  color: #8e8e8e;
+  font-size: clamp(10px, 1.2vw, 12px);
+}
+@media (max-width: 720px) {
+  .landing-prompt .landing-header { justify-content: space-between; }
+  .landing-prompt .landing-nav { display: none; }
+  .landing-prompt .landing-header-space { display: block; }
+  .landing-prompt .landing-hero h1 { font-size: clamp(30px, 10vw, 50px); letter-spacing: -.07em; line-height: 1.06; }
+  .landing-prompt .landing-proof-row { transform: none; }
+  .landing-prompt .landing-actions { width: auto; }
+  .landing-prompt .landing-primary { width: auto; }
+  .landing-prompt .landing-stats { grid-template-columns: 1fr 1fr; gap: 20px 12px; }
+  .landing-prompt .landing-stats > div:nth-child(n+3) { display: grid; }
+}
