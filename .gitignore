@@ -17,3 +17,4 @@ videos/**/snapshots/
 videos/**/renders/
 videos/**/audio/*.wav
 videos/**/.hyperframes/
+videos/final/
