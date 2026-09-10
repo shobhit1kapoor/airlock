@@ -78,21 +78,21 @@ Konnect provides the configuration surface and manages the local data plane. The
                                   manages local data plane
                                              │
 ┌──────────────────────────────────────── airlock-net ───────────────────────────────────────┐
-│ Browser → Next.js control panel → FastAPI control API                                         │
-│                                         │                                                     │
-│                                         ▼                                                     │
-│                              LOCAL KONG DATA PLANE                                            │
-│                  authenticate → authorize → proxy → retry → emit OTEL                         │
-│                          ┌──────────────┼───────────────┐                                     │
-│                          ▼              ▼               ▼                                     │
-│                     AI Model       MCP listener      A2A AI Agents                             │
-│                          │              │               │                                     │
-│                    Ollama adapters   Git MCP       Planner / Research /                         │
-│                          │             server      Security / Coding                            │
-│                          └──── host.docker.internal:11434 ─────► Ollama                        │
-│                                                                                               │
-│ Kong OTLP logs → OpenTelemetry Collector → FastAPI OTLP ingestion → PostgreSQL → SSE → UI    │
-└───────────────────────────────────────────────────────────────────────────────────────────────┘
+│ Browser → Next.js control panel → FastAPI control API                                      │
+│                                         │                                                  │
+│                                         ▼                                                  │
+│                              LOCAL KONG DATA PLANE                                         │
+│                  authenticate → authorize → proxy → retry → emit OTEL                      │
+│                          ┌──────────────┼───────────────┐                                  │
+│                          ▼              ▼               ▼                                  │
+│                     AI Model       MCP listener      A2A AI Agents                         │
+│                          │              │               │                                  │
+│                    Ollama adapters   Git MCP       Planner / Research /                    │
+│                          │             server      Security / Coding                       │
+│                          └──── host.docker.internal:11434 ─────► Ollama                    │
+│                                                                                            │
+│ Kong OTLP logs → OpenTelemetry Collector → FastAPI OTLP ingestion → PostgreSQL → SSE → UI  │
+└────────────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ### Runtime ownership
